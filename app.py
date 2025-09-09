@@ -1,6 +1,5 @@
 from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
-from pymongo import MongoClient
 from datetime import datetime
 import pytz
 import gevent
@@ -12,13 +11,6 @@ app.config['SECRET_KEY'] = 'lovnish_super_secret_key'
 
 socketio = SocketIO(app, async_mode='gevent', cors_allowed_origins='*')
 
-
-# Connect to MongoDB Atlas
-MONGO_URI = "mongodb+srv://test:test@cluster0.sxci1.mongodb.net/chatDB?retryWrites=true&w=majority"
-client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
-db = client['lovnishdarkchatDB']
-messages_collection = db['messages']
-
 IST = pytz.timezone('Asia/Kolkata')
 
 @app.route('/')
@@ -27,33 +19,12 @@ def index():
 
 @socketio.on('connect')
 def handle_connect():
-    """Send past messages when a user connects."""
-    try:
-        past_messages = list(messages_collection.find({}))
-        for msg in past_messages:
-            msg['_id'] = str(msg['_id'])  # Convert ObjectId to string
-
-            if 'timestamp' in msg:
-                try:
-                    if isinstance(msg['timestamp'], str):
-                        msg['timestamp'] = datetime.strptime(msg['timestamp'], '%Y-%m-%d %H:%M:%S')
-                    
-                    if msg['timestamp'].tzinfo is None:
-                        msg['timestamp'] = pytz.utc.localize(msg['timestamp'])
-
-                    ist_time = msg['timestamp'].astimezone(IST)
-                    msg['timestamp'] = ist_time.strftime("%d-%m-%Y %I:%M %p")  # Desired date time format
-                except Exception as e:
-                    print("Error parsing timestamp:", e)
-                    msg['timestamp'] = "Unknown"
-
-        emit('load_messages', past_messages)
-    except Exception as e:
-        print("MongoDB Connection Error:", e)
+    """Send a welcome or empty chat log on user connect (MongoDB removed)."""
+    emit('load_messages', [])  # Send empty list instead of past messages
 
 @socketio.on('message')
 def handle_message(data):
-    """Store messages with nickname in MongoDB and broadcast."""
+    """Broadcast messages with nickname and timestamp (MongoDB removed)."""
     nickname = data.get('nickname', 'Anonymous')
     message_text = data.get('message', '')
     
@@ -64,12 +35,8 @@ def handle_message(data):
     message_doc = {
         'nickname': nickname,
         'message': message_text,
-        'timestamp': utc_now  # Store in UTC
+        'timestamp': ist_now.strftime("%d-%m-%Y %I:%M %p")
     }
-    inserted_doc = messages_collection.insert_one(message_doc)
-
-    message_doc['_id'] = str(inserted_doc.inserted_id)
-    message_doc['timestamp'] = ist_now.strftime("%d-%m-%Y %I:%M %p")
 
     emit('message', message_doc, broadcast=True)
 
